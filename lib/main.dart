@@ -48,7 +48,6 @@ class _FridgeListState extends State<FridgeList> {
     try {
       barcodeScanRes = await FlutterBarcodeScanner.scanBarcode(
           '#ff6666', 'Cancel', true, ScanMode.BARCODE);
-      addItem(items, barcodeScanRes);
     } on PlatformException {
       barcodeScanRes = 'Failed to get platform version.';
     }
@@ -116,19 +115,83 @@ void processScan(List<Item> items, Bool canScan, String barcode) async {
     return;
   }
 
+  //make a call to store it in the database
+  int itemId = await updateDatabaseWithItem(itemName);
+  if (itemId < 0) {
+    toast("Item could not be added :(");
+  }
+
   // send some sort of notification to let the user know scan was successful
   toast("Item added!");
   // add the item if successful
-  addItem(items, itemName);
+  addItem(items, itemName, itemId);
   // start a delay
   print('item added: ' + itemName);
   Timer(const Duration(milliseconds: 1500), () => canScan.value = true);
 }
 
-void addItem(List<Item> items, String item_name){
+void addItem(List<Item> items, String item_name, int itemId){
   print("inserted item");
-  items.add(Item(name: item_name, time_in_fridge:  "2 weeks"));
+  items.add(Item(name: item_name, time_in_fridge:  "2 weeks", id: itemId));
 
+}
+
+Future<bool> connectToDatabase() async {
+  String url = 'munch-api-358900.ue.r.appspot.com';
+  String route = "/whatthefridge/connect";
+
+  try {
+    Response res = await get(
+        Uri.https(url, route)
+    );
+
+    if (res.statusCode == 200) {
+      return true;
+    }
+
+  } catch (exception) {
+    print('caught error: $exception');
+  }
+  return false;
+}
+
+Future<int> updateDatabaseWithItem(String itemName) async {
+  String url = 'munch-api-358900.ue.r.appspot.com';
+  String route = "/whatthefridge/item";
+
+  // establish the connection
+  if (await connectToDatabase() == false){
+    print("Error: Could not connect to the database");
+    return -1;
+  }
+  print("Sending POST request");
+  try {
+    Response res = await post(
+      Uri.https(url, route),
+      headers: <String, String>{
+        'Content-Type': 'application/json; charset=UTF-8',
+      },
+      body: jsonEncode(<String, String>{
+        'item_name': itemName,
+      }),
+    );
+
+    print("Extracting response body");
+    print(res.body);
+    Map data = jsonDecode(res.body);
+
+    print(data);
+
+    if (!data["maxId"]){
+      return -1;
+    }
+
+    return data["maxId"];
+
+  } catch (exception) {
+    print('caught error: $exception');
+    return - 1;
+  }
 }
 
 Future<String?> getNameFromCode(String barcode) async{
@@ -144,10 +207,8 @@ Future<String?> getNameFromCode(String barcode) async{
     );
     // log(res.body);
     Map data = jsonDecode(res.body);
-    print(data['product']['product_name']);
     if (data['product']['product_name'] != ''){
       itemName = data['product']['product_name'];
-      print("Item is: " + itemName!);
     }
 
   } catch (exception) {
@@ -155,6 +216,10 @@ Future<String?> getNameFromCode(String barcode) async{
   }
 
   return itemName;
+}
+
+void updateFridgeFromDatabase() async {
+
 }
 
 class Bool {
