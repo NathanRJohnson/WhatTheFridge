@@ -63,6 +63,13 @@ class _FridgeListState extends State<FridgeList> {
   }
 
 
+  Future refresh() async {
+    List<Item> waitList = await getFridgeFromDatabase();
+    setState(() {
+      items = waitList;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -72,26 +79,54 @@ class _FridgeListState extends State<FridgeList> {
         centerTitle: true,
         backgroundColor: Colors.redAccent,
       ),
-      body: Column(
-        children: items.map( (item) => ItemCard(
-            item: item,
-            delete: () {
-              setState(() {
-                items.remove(item);
-              });
-            }
-        )).toList(),
-      ),
+      body: RefreshIndicator(
+        onRefresh: refresh,
+        child: Stack(
+          children: <Widget>[ListView(), ListView(
+              children: items.map( (item) => ItemCard(
+                  item: item,
+                  delete: () {
+                    setState(() {
+                      deleteItem(item);
+                    });
+                  }
+              )).toList(),
+            )],
+          ),
+        ),
       floatingActionButton: IconButton(
         // open the barcode scanner
         onPressed: () {
-            startBarcodeScanStream();
+          startBarcodeScanStream();
         },
         icon: Icon(Icons.add),
       ),
     );
   }
 
+  Future<bool> deleteItem(Item item) async{
+    String url = 'munch-api-358900.ue.r.appspot.com';
+    String route = "/whatthefridge/item";
+
+    if (await connectToDatabase() == false){
+      print("Error: Could not connect to the database");
+      return false;
+    }
+
+    try {
+      Response res = await put(
+          Uri.https(url, route)
+      );
+
+      if (res.statusCode == 200) {
+        return true;
+      }
+
+    } catch (exception) {
+      print('caught error: $exception');
+    }
+
+  }
 }
 
 void processScan(List<Item> items, Bool canScan, String barcode) async {
@@ -176,11 +211,11 @@ Future<int> updateDatabaseWithItem(String itemName) async {
       }),
     );
 
-    print("Extracting response body");
-    print(res.body);
+    // print("Extracting response body");
+    // print(res.body);
     Map data = jsonDecode(res.body);
 
-    print(data);
+    // print(data);
 
     if (!data["maxId"]){
       return -1;
@@ -189,7 +224,7 @@ Future<int> updateDatabaseWithItem(String itemName) async {
     return data["maxId"];
 
   } catch (exception) {
-    print('caught error: $exception');
+    print('Exception Caught: $exception');
     return - 1;
   }
 }
@@ -212,15 +247,48 @@ Future<String?> getNameFromCode(String barcode) async{
     }
 
   } catch (exception) {
-    print('caught error: $exception');
+    print('Exception Caught: $exception');
   }
 
   return itemName;
 }
 
-void updateFridgeFromDatabase() async {
+Future<List<Item>> getFridgeFromDatabase() async {
+  if (! await connectToDatabase()){
+    print("Error: Unable to connect to the database");
+    return [];
+  }
 
+  String url = 'munch-api-358900.ue.r.appspot.com';
+  String route = "/whatthefridge/";
+  List<Item> items = [];
+
+  try {
+    Response res = await get(
+      Uri.https(url, route),
+    );
+
+    print("Extracting response body");
+    print(res.body);
+    var itemsJson = jsonDecode(res.body) as List;
+    print(itemsJson);
+    items = itemsJson.map( (itemJson) => Item.fromJSON(itemJson) ).toList();
+    print(items);
+
+
+  } catch (exception) {
+    print('Exception Caught: $exception');
+    items = [];
+  }
+
+  return items;
 }
+
+// List<Item> buildFridgeList(Map data) {
+//   for (dynamic object : data)
+//   return [];
+//
+// }
 
 class Bool {
   late bool value;
@@ -239,5 +307,6 @@ Future<bool?> toast(String message) {
       textColor: Colors.white,
       fontSize: 20.0);
 }
+
 
 
