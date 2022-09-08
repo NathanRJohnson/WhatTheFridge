@@ -11,6 +11,12 @@ import 'item_card.dart';
 import 'dart:async';
 import 'dart:convert';
 
+class Bool {
+  late bool value;
+  Bool (bool _b){
+    value = _b;
+  }
+}
 
 //2f202849-15e7-11ed-b24f-005056a6bb13
 void main() => runApp(MaterialApp(
@@ -37,7 +43,10 @@ class _FridgeListState extends State<FridgeList> {
   Future<void> startBarcodeScanStream() async {
     FlutterBarcodeScanner.getBarcodeStreamReceiver(
         '#ff6666', 'Cancel', false, ScanMode.BARCODE)!
-        .listen((barcode) => setState((){processScan(items, canScan, barcode);}));
+        .listen((barcode) =>
+        setState(() {
+          processScan(items, canScan, barcode);
+        }));
     // processScan(items, barcode)
   }
 
@@ -83,17 +92,19 @@ class _FridgeListState extends State<FridgeList> {
         onRefresh: refresh,
         child: Stack(
           children: <Widget>[ListView(), ListView(
-              children: items.map( (item) => ItemCard(
-                  item: item,
-                  delete: () {
-                    setState(() {
-                      deleteItem(item);
-                    });
-                  }
-              )).toList(),
-            )],
-          ),
+            children: items.map((item) =>
+                ItemCard(
+                    item: item,
+                    delete: () {
+                      setState(() {
+                        items.remove(item);
+                      });
+                    }
+                )).toList(),
+          )
+          ],
         ),
+      ),
       floatingActionButton: IconButton(
         // open the barcode scanner
         onPressed: () {
@@ -104,185 +115,154 @@ class _FridgeListState extends State<FridgeList> {
     );
   }
 
-  Future<bool> deleteItem(Item item) async{
-    String url = 'munch-api-358900.ue.r.appspot.com';
-    String route = "/whatthefridge/item";
-
-    if (await connectToDatabase() == false){
-      print("Error: Could not connect to the database");
-      return false;
+  void processScan(List<Item> items, Bool canScan, String barcode) async {
+    if (!canScan.value) {
+      print("can't scan yet!");
+      return;
     }
 
+    // check barcode validity
+    if (barcode.startsWith("-1")) {
+      // send badness notification
+      return;
+    }
+
+    // api call
+    canScan.value = false;
+    String? itemName = await getNameFromCode(barcode);
+    // api check
+    if (itemName == null) {
+      canScan.value = true;
+      return;
+    }
+
+    //make a call to store it in the database
+    int itemId = await updateDatabaseWithItem(itemName);
+    if (itemId < 0) {
+      toast("Item could not be added :(");
+    }
+
+    // send some sort of notification to let the user know scan was successful
+    toast("Item added!");
+    // add the item if successful
+    addItem(items, itemName, itemId);
+    // start a delay
+    print('item added: ' + itemName);
+    Timer(const Duration(milliseconds: 1500), () => canScan.value = true);
+  }
+
+  void addItem(List<Item> items, String item_name, int itemId) {
+    print("inserted item");
+    items.add(Item(name: item_name, time_in_fridge: "2 weeks", id: itemId));
+  }
+
+  Future<bool> connectToDatabase() async {
+    String url = 'munch-api-358900.ue.r.appspot.com';
+    String route = "/whatthefridge/connect";
+
     try {
-      Response res = await put(
+      Response res = await get(
           Uri.https(url, route)
       );
 
       if (res.statusCode == 200) {
         return true;
       }
-
     } catch (exception) {
       print('caught error: $exception');
     }
-
-  }
-}
-
-void processScan(List<Item> items, Bool canScan, String barcode) async {
-  if (!canScan.value){
-    print("can't scan yet!");
-    return;
+    return false;
   }
 
-  // check barcode validity
-  if (barcode.startsWith("-1")){
-    // send badness notification
-    return;
-  }
+  Future<int> updateDatabaseWithItem(String itemName) async {
+    String url = 'munch-api-358900.ue.r.appspot.com';
+    String route = "/whatthefridge/item";
 
-  // api call
-  canScan.value = false;
-  String? itemName = await getNameFromCode(barcode);
-  // api check
-  if (itemName == null){
-    canScan.value = true;
-    return;
-  }
-
-  //make a call to store it in the database
-  int itemId = await updateDatabaseWithItem(itemName);
-  if (itemId < 0) {
-    toast("Item could not be added :(");
-  }
-
-  // send some sort of notification to let the user know scan was successful
-  toast("Item added!");
-  // add the item if successful
-  addItem(items, itemName, itemId);
-  // start a delay
-  print('item added: ' + itemName);
-  Timer(const Duration(milliseconds: 1500), () => canScan.value = true);
-}
-
-void addItem(List<Item> items, String item_name, int itemId){
-  print("inserted item");
-  items.add(Item(name: item_name, time_in_fridge:  "2 weeks", id: itemId));
-
-}
-
-Future<bool> connectToDatabase() async {
-  String url = 'munch-api-358900.ue.r.appspot.com';
-  String route = "/whatthefridge/connect";
-
-  try {
-    Response res = await get(
-        Uri.https(url, route)
-    );
-
-    if (res.statusCode == 200) {
-      return true;
-    }
-
-  } catch (exception) {
-    print('caught error: $exception');
-  }
-  return false;
-}
-
-Future<int> updateDatabaseWithItem(String itemName) async {
-  String url = 'munch-api-358900.ue.r.appspot.com';
-  String route = "/whatthefridge/item";
-
-  // establish the connection
-  if (await connectToDatabase() == false){
-    print("Error: Could not connect to the database");
-    return -1;
-  }
-  print("Sending POST request");
-  try {
-    Response res = await post(
-      Uri.https(url, route),
-      headers: <String, String>{
-        'Content-Type': 'application/json; charset=UTF-8',
-      },
-      body: jsonEncode(<String, String>{
-        'item_name': itemName,
-      }),
-    );
-
-    // print("Extracting response body");
-    // print(res.body);
-    Map data = jsonDecode(res.body);
-
-    // print(data);
-
-    if (!data["maxId"]){
+    // establish the connection
+    if (await connectToDatabase() == false) {
+      print("Error: Could not connect to the database");
       return -1;
     }
+    print("Sending POST request");
+    try {
+      Response res = await post(
+        Uri.https(url, route),
+        headers: <String, String>{
+          'Content-Type': 'application/json; charset=UTF-8',
+        },
+        body: jsonEncode(<String, String>{
+          'item_name': itemName,
+        }),
+      );
 
-    return data["maxId"];
+      // print("Extracting response body");
+      // print(res.body);
+      Map data = jsonDecode(res.body);
 
-  } catch (exception) {
-    print('Exception Caught: $exception');
-    return - 1;
+      // print(data);
+
+      if (!data["maxId"]) {
+        return -1;
+      }
+
+      return data["maxId"];
+    } catch (exception) {
+      print('Exception Caught: $exception');
+      return -1;
+    }
   }
-}
 
-Future<String?> getNameFromCode(String barcode) async{
-  String url = 'world.openfoodfacts.org';
-  String key = "7664c443d26607247ef9d99560ef4360";
-  String path = '/api/v0/product/$barcode.json';
-  String? itemName;
-  try {
-    //request
-    print(url+path);
-    Response res = await get(
+  Future<String?> getNameFromCode(String barcode) async {
+    String url = 'world.openfoodfacts.org';
+    String key = "7664c443d26607247ef9d99560ef4360";
+    String path = '/api/v0/product/$barcode.json';
+    String? itemName;
+    try {
+      //request
+      print(url + path);
+      Response res = await get(
         Uri.https(url, path),
-    );
-    // log(res.body);
-    Map data = jsonDecode(res.body);
-    if (data['product']['product_name'] != ''){
-      itemName = data['product']['product_name'];
+      );
+      // log(res.body);
+      Map data = jsonDecode(res.body);
+      if (data['product']['product_name'] != '') {
+        itemName = data['product']['product_name'];
+      }
+    } catch (exception) {
+      print('Exception Caught: $exception');
     }
 
-  } catch (exception) {
-    print('Exception Caught: $exception');
+    return itemName;
   }
 
-  return itemName;
-}
+  Future<List<Item>> getFridgeFromDatabase() async {
+    if (!await connectToDatabase()) {
+      print("Error: Unable to connect to the database");
+      return [];
+    }
 
-Future<List<Item>> getFridgeFromDatabase() async {
-  if (! await connectToDatabase()){
-    print("Error: Unable to connect to the database");
-    return [];
+    String url = 'munch-api-358900.ue.r.appspot.com';
+    String route = "/whatthefridge/";
+    List<Item> items = [];
+
+    try {
+      Response res = await get(
+        Uri.https(url, route),
+      );
+
+      print("Extracting response body");
+      print(res.body);
+      var itemsJson = jsonDecode(res.body) as List;
+      print(itemsJson);
+      items = itemsJson.map((itemJson) => Item.fromJSON(itemJson)).toList();
+      print(items);
+    } catch (exception) {
+      print('Exception Caught: $exception');
+      items = [];
+    }
+
+    return items;
   }
-
-  String url = 'munch-api-358900.ue.r.appspot.com';
-  String route = "/whatthefridge/";
-  List<Item> items = [];
-
-  try {
-    Response res = await get(
-      Uri.https(url, route),
-    );
-
-    print("Extracting response body");
-    print(res.body);
-    var itemsJson = jsonDecode(res.body) as List;
-    print(itemsJson);
-    items = itemsJson.map( (itemJson) => Item.fromJSON(itemJson) ).toList();
-    print(items);
-
-
-  } catch (exception) {
-    print('Exception Caught: $exception');
-    items = [];
-  }
-
-  return items;
-}
 
 // List<Item> buildFridgeList(Map data) {
 //   for (dynamic object : data)
@@ -290,23 +270,15 @@ Future<List<Item>> getFridgeFromDatabase() async {
 //
 // }
 
-class Bool {
-  late bool value;
-  Bool (bool _b){
-    value = _b;
+  Future<bool?> toast(String message) {
+    Fluttertoast.cancel();
+    return Fluttertoast.showToast(
+        msg: message,
+        toastLength: Toast.LENGTH_LONG,
+        gravity: ToastGravity.TOP,
+        backgroundColor: Colors.redAccent,
+        textColor: Colors.white,
+        fontSize: 20.0);
   }
+
 }
-
-Future<bool?> toast(String message) {
-  Fluttertoast.cancel();
-  return Fluttertoast.showToast(
-      msg: message,
-      toastLength: Toast.LENGTH_LONG,
-      gravity: ToastGravity.TOP,
-      backgroundColor: Colors.redAccent,
-      textColor: Colors.white,
-      fontSize: 20.0);
-}
-
-
-
