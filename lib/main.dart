@@ -72,13 +72,6 @@ class _FridgeListState extends State<FridgeList> {
   }
 
 
-  Future refresh() async {
-    List<Item> waitList = await getFridgeFromDatabase();
-    setState(() {
-      items = waitList;
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -88,6 +81,7 @@ class _FridgeListState extends State<FridgeList> {
         centerTitle: true,
         backgroundColor: Colors.redAccent,
       ),
+
       body: RefreshIndicator(
         onRefresh: refresh,
         child: Stack(
@@ -108,7 +102,7 @@ class _FridgeListState extends State<FridgeList> {
       floatingActionButton: IconButton(
         // open the barcode scanner
         onPressed: () {
-          startBarcodeScanStream();
+            startBarcodeScanStream();
         },
         icon: Icon(Icons.add),
       ),
@@ -210,7 +204,6 @@ class _FridgeListState extends State<FridgeList> {
       print('Exception Caught: $exception');
       return -1;
     }
-  }
 
   Future<String?> getNameFromCode(String barcode) async {
     String url = 'world.openfoodfacts.org';
