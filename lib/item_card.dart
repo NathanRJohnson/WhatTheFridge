@@ -14,10 +14,14 @@ class ItemCard extends StatelessWidget {
       child:  Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: <Widget>[
-          Text(item.name,
-            style: TextStyle(
-              fontSize: 18.0,
-              color: Colors.grey[600],
+          SizedBox(width: 16),
+          Expanded(
+            flex: 1,
+            child: Text(item.name,
+              style: TextStyle(
+                fontSize: 18.0,
+                color: Colors.grey[600],
+              ),
             ),
           ),
           SizedBox(width: 30.0),

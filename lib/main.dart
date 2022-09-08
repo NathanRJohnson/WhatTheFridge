@@ -71,6 +71,12 @@ class _FridgeListState extends State<FridgeList> {
     });
   }
 
+  Future refresh() async {
+    List<Item> waitList = await getFridgeFromDatabase();
+    setState(() {
+      items = waitList;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -200,10 +206,12 @@ class _FridgeListState extends State<FridgeList> {
       }
 
       return data["maxId"];
+
     } catch (exception) {
       print('Exception Caught: $exception');
       return -1;
     }
+  }
 
   Future<String?> getNameFromCode(String barcode) async {
     String url = 'world.openfoodfacts.org';
@@ -243,12 +251,8 @@ class _FridgeListState extends State<FridgeList> {
         Uri.https(url, route),
       );
 
-      print("Extracting response body");
-      print(res.body);
       var itemsJson = jsonDecode(res.body) as List;
-      print(itemsJson);
       items = itemsJson.map((itemJson) => Item.fromJSON(itemJson)).toList();
-      print(items);
     } catch (exception) {
       print('Exception Caught: $exception');
       items = [];
@@ -256,6 +260,8 @@ class _FridgeListState extends State<FridgeList> {
 
     return items;
   }
+
+
 
 // List<Item> buildFridgeList(Map data) {
 //   for (dynamic object : data)
